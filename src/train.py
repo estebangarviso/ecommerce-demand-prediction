@@ -2,21 +2,23 @@ import pandas as pd
 import numpy as np
 import joblib
 import os
+
+from src.data_processing import prepare_full_pipeline
 from sklearn.ensemble import RandomForestRegressor, StackingRegressor
 from sklearn.linear_model import LinearRegression
-from sklearn.model_selection import train_test_split
 from xgboost import XGBRegressor
 from sklearn.metrics import mean_squared_error, r2_score
-import data_processing
 
-# Crear carpeta models si no existe (en el directorio padre)
-models_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models")
-os.makedirs(models_dir, exist_ok=True)
+# --- Configuración de Directorios ---
+# Definimos la ruta absoluta a la carpeta 'models' en la raíz del proyecto
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODELS_DIR = os.path.join(BASE_DIR, "models")
+os.makedirs(MODELS_DIR, exist_ok=True)
 
 
 def train_models() -> None:
     # 1. Obtener datos procesados
-    train_data, val_data, _ = data_processing.prepare_full_pipeline()
+    train, val, _ = prepare_full_pipeline()
 
     features = [
         "shop_cluster",
@@ -28,17 +30,19 @@ def train_models() -> None:
     ]
     target = "target_log"
 
-    # Si val está vacío, usar una estrategia de validación alternativa
-    if len(val_data) == 0:
-        print("Val vacío. Usando últimos 20% de train como validación...")
-        train_data, val_data = train_test_split(train_data, test_size=0.2, random_state=42)
+    X_train = train[features]
+    y_train = train[target]
+    X_val = val[features]
+    y_val = val[target]
 
-    X_train = train_data[features]
-    y_train = train_data[target]
-    X_val = val_data[features]
-    y_val = val_data[target]
+    print(f"🚀 Iniciando entrenamiento con {X_train.shape[0]} muestras...")
 
-    print(f"Entrenando con {X_train.shape[0]} muestras...")
+    # --- NUEVO: Calcular y Guardar Precios Promedio por Categoría ---
+    print("💾 Generando metadatos de precios (category_prices.pkl)...")
+    # Calculamos la mediana para ser robustos ante outliers de precios
+    category_prices = train.groupby("item_category_id")["item_price"].median().to_dict()
+    joblib.dump(category_prices, os.path.join(MODELS_DIR, "category_prices.pkl"))
+    # -------------------------------------------------------------
 
     # 2. Definir Modelos Base
     estimators = [
@@ -47,31 +51,32 @@ def train_models() -> None:
     ]
 
     # 3. Stacking (Ensemble Learning)
-    stacking_model = StackingRegressor(estimators=estimators, final_estimator=LinearRegression())
+    print("🧠 Entrenando Stacking Ensemble (XGBoost + Random Forest)...")
+    stacking_model = StackingRegressor(
+        estimators=estimators, final_estimator=LinearRegression(), n_jobs=-1
+    )
 
-    print("Entrenando Stacking Ensemble...")
     stacking_model.fit(X_train, y_train)
 
-    # 4. Evaluación
+    # 4. Evaluación Rápida
+    print("📉 Evaluando modelo...")
     preds_log = stacking_model.predict(X_val)
     preds = np.expm1(preds_log)  # Invertir logaritmo
     y_true = np.expm1(y_val)
 
     rmse = np.sqrt(mean_squared_error(y_true, preds))
     r2 = r2_score(y_true, preds)
+    print(f"✅ Resultados Validación -> RMSE: {rmse:.4f} | R2: {r2:.4f}")
 
-    print("--- Resultados Validación ---")
-    print(f"RMSE: {rmse:.4f}")
-    print(f"R2: {r2:.4f}")
+    # 5. Guardar Modelos
+    joblib.dump(stacking_model, os.path.join(MODELS_DIR, "stacking_model.pkl"))
+    joblib.dump(features, os.path.join(MODELS_DIR, "features.pkl"))
+    print(f"💾 Modelo guardado en: {os.path.join(MODELS_DIR, 'stacking_model.pkl')}")
 
-    # 5. Guardar Modelo y columnas
-    joblib.dump(stacking_model, os.path.join(models_dir, "stacking_model.pkl"))
-    joblib.dump(features, os.path.join(models_dir, "features.pkl"))
-    print(f"Modelo guardado en {os.path.join(models_dir, 'stacking_model.pkl')}")
-
-    # Guardar un modelo simple XGBoost para SHAP
+    # Guardar modelo simple para SHAP (TreeExplainer no soporta Stacking directo fácilmente)
+    print("💾 Guardando modelo proxy para SHAP...")
     xgb_simple = XGBRegressor(n_estimators=50, max_depth=5).fit(X_train, y_train)
-    joblib.dump(xgb_simple, os.path.join(models_dir, "xgb_simple_shap.pkl"))
+    joblib.dump(xgb_simple, os.path.join(MODELS_DIR, "xgb_simple_shap.pkl"))
 
 
 if __name__ == "__main__":
