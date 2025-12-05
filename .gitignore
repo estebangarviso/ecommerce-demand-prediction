@@ -24,4 +24,3 @@ data/processed/*
 
 # Archivos de configuración local o secretos
 .DS_Store
-Pipfile.lock
