@@ -3,7 +3,7 @@
 import streamlit as st
 
 
-class ArchitectureView:
+class AboutView:
     """Vista de información del sistema."""
 
     @staticmethod

@@ -2,10 +2,10 @@
 
 from .prediction_view import PredictionView
 from .monitoring_view import MonitoringView
-from .architecture_view import ArchitectureView
+from .about_view import AboutView
 
 __all__ = [
     "PredictionView",
     "MonitoringView",
-    "ArchitectureView",
+    "AboutView",
 ]

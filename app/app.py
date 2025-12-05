@@ -39,7 +39,7 @@ from app.config import (
 from app.state_manager import SessionStateManager
 from app.services import PricingService, PredictionService
 from app.components import SHAPRenderer
-from app.views import PredictionView, MonitoringView, ArchitectureView
+from app.views import PredictionView, MonitoringView, AboutView
 from app.ui_components import Sidebar, Header
 
 
@@ -147,7 +147,7 @@ def main():
         monitoring_view.render()
 
     with tab_info:
-        ArchitectureView.render()
+        AboutView.render()
 
 
 if __name__ == "__main__":
