@@ -1,81 +1,154 @@
-import streamlit as st
-import pandas as pd
-import shap
+"""
+Sistema Predictivo de Demanda - Aplicación Principal.
+
+Esta aplicación implementa un sistema de predicción de demanda utilizando
+técnicas de Machine Learning.
+"""
+
 import sys
 import os
 
-# Agregar directorio raíz al path para importar src
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from src.inference import load_system, predict_demand
+import streamlit as st
 
-# Configuración de página
-st.set_page_config(page_title="Predicción de Demanda AI", layout="wide")
+# --- 1. Configuración de Página ---
+st.set_page_config(
+    page_title="Sistema Predictivo de Demanda",
+    page_icon=":material/analytics:",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
-st.title("Sistema de Predicción de Demanda E-commerce")
-st.markdown("---")
+# Agregar directorio raíz al path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-# Cargar Backend
-model, features, shap_model = load_system()
+from src.inference import load_system, get_unique_categories
+
+# Importar módulos de la aplicación
+from app.config import (
+    CLUSTER_MAP,
+    DEFAULT_PRICE,
+    DEFAULT_PRICE_MIN,
+    DEFAULT_PRICE_MAX,
+    PRICE_RANGE_MULTIPLIER,
+    PRICE_RANGE_MAX_MULTIPLIER,
+    DARK_THEME_BG_COLOR,
+    DARK_THEME_TEXT_COLOR,
+    LIGHT_THEME_BG_COLOR,
+    LIGHT_THEME_TEXT_COLOR,
+)
+from app.state_manager import SessionStateManager
+from app.services import PricingService, PredictionService
+from app.components import SHAPRenderer
+from app.views import PredictionView, MonitoringView, ArchitectureView
+from app.ui_components import Sidebar, Header
 
 
-# Helper para renderizar gráficos SHAP
-def st_shap(plot, height=None):
-    """Helper para renderizar gráficos JS de SHAP en Streamlit"""
-    import streamlit.components.v1 as components
-
-    shap_html = f"<head>{shap.getjs()}</head><body>{plot.html()}</body>"
-    components.html(shap_html, height=height if height else 400)
+# --- 2. Carga de Recursos ---
+@st.cache_data
+def load_categories_map():
+    """Carga el mapa de categorías desde el sistema."""
+    return get_unique_categories()
 
 
-if model is None:
-    st.error("Error: No se encontraron los modelos. Ejecuta 'python src/train.py' primero.")
-else:
-    # --- Sidebar: Inputs del Usuario ---
-    st.sidebar.header("Parámetros de Entrada")
+@st.cache_resource
+def load_cached_system():
+    """Carga el sistema de predicción (modelo, features, etc.)."""
+    return load_system()
 
-    # Simulamos inputs (en producción vendrían de una base de datos)
-    shop_cluster = st.sidebar.selectbox("Cluster de Tienda (Segmento)", [0, 1, 2])
-    item_category = st.sidebar.number_input("ID Categoría", min_value=0, max_value=83, value=19)
-    item_price = st.sidebar.slider("Precio del Producto", 0.0, 50000.0, 1500.0)
 
-    st.sidebar.subheader("Historial de Ventas (Lags)")
-    lag_1 = st.sidebar.number_input("Ventas Mes Anterior", 0, 100, 5)
-    lag_2 = st.sidebar.number_input("Ventas hace 2 Meses", 0, 100, 4)
-    lag_3 = st.sidebar.number_input("Ventas hace 3 Meses", 0, 100, 4)
+def initialize_application():
+    """
+    Inicializa la aplicación cargando recursos y configurando el estado.
 
-    # Botón de Predicción
-    if st.sidebar.button("Predecir Demanda"):
-        # Construir diccionario de datos
-        input_data = {
-            "shop_cluster": shop_cluster,
-            "item_category_id": item_category,
-            "item_price": item_price,
-            "item_cnt_lag_1": lag_1,
-            "item_cnt_lag_2": lag_2,
-            "item_cnt_lag_3": lag_3,
-        }
+    Returns:
+        Tupla con los componentes inicializados
+    """
+    # Cargar recursos
+    category_map = load_categories_map()
+    model, _features, shap_model, cat_prices = load_cached_system()
 
-        # --- Backend Call ---
-        prediction = predict_demand(model, input_data)
+    # Validar modelo
+    if model is None:
+        st.error(
+            "Modelo no encontrado. Ejecuta `pipenv run train`.",
+            icon=":material/folder_off:",
+        )
+        st.stop()
 
-        # --- Frontend Display ---
-        col1, col2 = st.columns([1, 2])
+    # Inicializar estado
+    first_category = list(category_map.keys())[0] if category_map else None
+    SessionStateManager.initialize_state(
+        DEFAULT_PRICE, DEFAULT_PRICE_MIN, DEFAULT_PRICE_MAX, cat_prices, first_category
+    )
 
-        with col1:
-            st.success("Predicción Exitosa")
-            st.metric(label="Demanda Estimada (Mes Siguiente)", value=f"{prediction:.2f} Unidades")
+    # Inicializar servicios
+    pricing_service = PricingService(
+        cat_prices,
+        DEFAULT_PRICE,
+        DEFAULT_PRICE_MIN,
+        DEFAULT_PRICE_MAX,
+        PRICE_RANGE_MULTIPLIER,
+        PRICE_RANGE_MAX_MULTIPLIER,
+    )
 
-        with col2:
-            st.subheader("🔍 Explicabilidad del Modelo (SHAP)")
-            st.info(
-                "Este gráfico muestra cómo cada variable empujó la predicción hacia arriba (rojo) o abajo (azul)."
-            )
+    prediction_service = PredictionService(model, shap_model)
 
-            # Generar SHAP Force Plot
-            # Usamos el modelo simple XGBoost porque TreeExplainer es rápido y compatible
-            explainer = shap.TreeExplainer(shap_model)
-            features_df = pd.DataFrame([input_data])
-            shap_values = explainer.shap_values(features_df)
+    # Configuración de tema para SHAP
+    theme_config = {
+        "dark_bg": DARK_THEME_BG_COLOR,
+        "dark_text": DARK_THEME_TEXT_COLOR,
+        "light_bg": LIGHT_THEME_BG_COLOR,
+        "light_text": LIGHT_THEME_TEXT_COLOR,
+    }
+    shap_renderer = SHAPRenderer(theme_config)
 
-            # Renderizar Force Plot (sin matplotlib para obtener HTML interactivo)
-            st_shap(shap.force_plot(explainer.expected_value, shap_values[0], features_df.iloc[0]))
+    return category_map, pricing_service, prediction_service, shap_renderer
+
+
+def main():
+    """Función principal de la aplicación."""
+    # Inicializar aplicación
+    category_map, pricing_service, prediction_service, shap_renderer = initialize_application()
+
+    # Renderizar header
+    Header.render()
+
+    # Renderizar sidebar y obtener inputs
+    sidebar = Sidebar(category_map, CLUSTER_MAP, pricing_service)
+    (
+        item_category_id,
+        shop_cluster,
+        item_price,
+        lag_1,
+        lag_2,
+        lag_3,
+        predict_btn,
+    ) = sidebar.render()
+
+    # Preparar datos de entrada
+    input_data = {
+        "shop_cluster": shop_cluster,
+        "item_category_id": item_category_id,
+        "item_price": item_price,
+        "item_cnt_lag_1": lag_1,
+        "item_cnt_lag_2": lag_2,
+        "item_cnt_lag_3": lag_3,
+    }
+
+    # Renderizar tabs principales
+    tab_pred, tab_monitor, tab_info = st.tabs(["Predicción", "Monitoreo", "Acerca de"])
+
+    with tab_pred:
+        prediction_view = PredictionView(prediction_service, shap_renderer)
+        prediction_view.render(predict_btn, input_data)
+
+    with tab_monitor:
+        monitoring_view = MonitoringView()
+        monitoring_view.render()
+
+    with tab_info:
+        ArchitectureView.render()
+
+
+if __name__ == "__main__":
+    main()
