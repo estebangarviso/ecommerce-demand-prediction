@@ -165,6 +165,20 @@ La aplicación incluye una sección de mantenimiento en la pestaña **Monitoreo*
 * **Gráficos Interactivos**: Proyecciones temporales con Plotly
 * **Panel de Salud**: Métricas del modelo (RMSE, MAE, R²) y gráficos de estabilidad
 
+## Capturas de Pantalla
+
+### Vista de Predicción
+
+La interfaz principal permite realizar predicciones interactivas con visualización de factores de influencia SHAP:
+
+![Vista de Predicción](docs/screenshots/prediction-view.png)
+
+### Panel de Monitoreo
+
+Métricas de rendimiento del modelo y herramientas de mantenimiento del sistema:
+
+![Panel de Monitoreo](docs/screenshots/monitoring-view.png)
+
 ## Descripción Técnica del Sistema
 
 ### 1. Metodología
