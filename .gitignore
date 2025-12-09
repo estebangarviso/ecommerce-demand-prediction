@@ -5,6 +5,11 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 
+# Tests
+.coverage
+htmlcov/
+.nox/
+
 # Entornos virtuales
 .env
 .venv
