@@ -1,0 +1,22 @@
+#!/bin/sh
+# Git pre-commit hook para sincronizar requirements.txt automáticamente
+
+echo "🔄 Sincronizando requirements.txt desde Pipfile..."
+
+# Verificar si Pipfile cambió
+if git diff --cached --name-only | grep -q "Pipfile"; then
+    echo "📦 Pipfile modificado, actualizando requirements.txt..."
+    
+    # Generar requirements.txt
+    pipenv requirements > requirements.txt 2>/dev/null
+    
+    if [ $? -eq 0 ]; then
+        # Agregar requirements.txt al commit
+        git add requirements.txt
+        echo "✅ requirements.txt actualizado y agregado al commit"
+    else
+        echo "⚠️  Error al generar requirements.txt (¿Pipenv instalado?)"
+    fi
+fi
+
+exit 0
