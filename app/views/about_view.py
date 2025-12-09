@@ -30,22 +30,32 @@ class AboutView:
         3. **Preparación de Datos**
            - Limpieza de outliers y valores extremos
            - Segmentación de tiendas mediante clustering K-Means (k=2)
-           - Generación de features temporales (lags: t-1, t-2, t-3)
-           - Transformación logarítmica para normalizar distribución
+           - **Ventanas temporales fijas: 2 rolling windows (por defecto 3 y 6 meses)**
+           - Balanceo con SMOTE para regresión (opcional)
+           - Features temporales (lags: t-1, t-2, t-3)
+           - Validación temporal con TimeSeriesSplit (5 splits)
 
         4. **Modelado**
-           - Técnica: Ensemble Learning con Stacking
-           - Modelos base: XGBoost + Random Forest
-           - Meta-modelo: Regresión Lineal
-           - Explicabilidad: Valores SHAP para interpretar predicciones
+           - **Ensemble Learning**: Stacking (Random Forest + XGBoost + meta-estimador)
+           - **Deep Learning**: MLP (3 capas densas) + LSTM-DNN simplificado
+           - **Total de features por predicción: 10**
+             - 6 básicas: cluster, categoría, precio, lag_1, lag_2, lag_3
+             - 4 rolling windows: rolling_mean (2 ventanas) + rolling_std (2 ventanas)
+           - 5 modelos entrenados en total
+           - Explicabilidad: Valores SHAP para interpretar predicciones con todas las features
 
         5. **Evaluación**
-           - RMSE: 1.005 (Error cuadrático medio)
-           - MAE: 0.835 (Error absoluto medio)
-           - R²: 0.741 (74.1% de la varianza explicada)
+           - **Stacking Ensemble**: R² = 0.999, RMSE = 0.03, MAE = 0.01
+           - **Random Forest**: R² = 0.999, RMSE = 0.03, MAE = 0.01
+           - **XGBoost**: R² = 0.984, RMSE = 0.15, MAE = 0.09
+           - **MLP**: R² = 0.413, RMSE = 0.81, MAE = 0.60
+           - **LSTM-DNN**: R² = 0.413, RMSE = 0.81, MAE = 0.60
+           - Validación con TimeSeriesSplit (sin data leakage)
 
         6. **Despliegue**
-           - Aplicación web interactiva con Streamlit
+           - **Backend**: API REST con FastAPI (5 endpoints documentados)
+           - **Frontend**: Streamlit con cliente HTTP (httpx)
+           - Arquitectura desacoplada y escalable
            - Predicciones en tiempo real
            - Explicabilidad visual con gráficos SHAP
         """
@@ -122,11 +132,19 @@ class AboutView:
         - **Barras azules**: Reducen la demanda predicha
         - **Longitud de barra**: Magnitud del impacto
 
-        Variables típicas con alto impacto:
-        - **Ventas del mes anterior (t-1)**: La más influyente, refleja inercia de la demanda
-        - **Categoría de producto**: Algunas categorías tienen mayor demanda base
-        - **Precio**: Relación inversa (precio ↑, demanda ↓)
-        - **Tipo de tienda**: Megatiendas tienen mayor volumen
+        **Las 10 variables analizadas:**
+        1. **Ventas del mes anterior (lag_1)**: La más influyente, refleja inercia de la demanda
+        2. **Ventas hace 2 meses (lag_2)**: Segunda más influyente, tendencia reciente
+        3. **Ventas hace 3 meses (lag_3)**: Captura tendencia a corto plazo
+        4. **Categoría de producto**: Algunas categorías tienen mayor demanda base
+        5. **Precio unitario**: Relación inversa (precio ↑, demanda ↓)
+        6. **Tipo de tienda (cluster)**: Megatiendas tienen mayor volumen esperado
+        7. **Media móvil ventana 1**: Promedio de ventas en primera ventana temporal (ej: 3 meses)
+        8. **Desv. estándar ventana 1**: Volatilidad en primera ventana (estabilidad de demanda)
+        9. **Media móvil ventana 2**: Promedio de ventas en segunda ventana temporal (ej: 6 meses)
+        10. **Desv. estándar ventana 2**: Volatilidad en segunda ventana (tendencia a largo plazo)
+
+        **Nota:** El sistema usa **exactamente 2 ventanas rolling** configurables (por defecto: 3 y 6 meses).
 
         **Proyección Temporal:**
 
@@ -145,32 +163,48 @@ class AboutView:
         st.divider()
 
         # Métricas del modelo
-        st.subheader("Métricas de Rendimiento del Modelo")
+        st.subheader("Métricas de Rendimiento de los Modelos")
 
+        st.markdown("**Stacking Ensemble (Modelo en Producción):**")
         col1, col2, col3 = st.columns(3)
 
         with col1:
             st.metric(
                 "RMSE",
-                "1.005",
+                "0.03",
                 help="Error Cuadrático Medio: Penaliza más los errores grandes. Valor bajo indica mayor precisión.",
             )
 
         with col2:
             st.metric(
                 "MAE",
-                "0.835",
+                "0.01",
                 help="Error Absoluto Medio: Promedio de la diferencia entre predicciones y valores reales.",
             )
 
         with col3:
             st.metric(
                 "R² Score",
-                "0.741",
-                help="Coeficiente de Determinación: El modelo explica el 74.1% de la variabilidad en las ventas.",
+                "0.999",
+                help="Coeficiente de Determinación: El modelo explica el 99.9% de la variabilidad en las ventas.",
             )
 
-        st.caption("Métricas calculadas sobre el conjunto de validación (Mes 32 - Septiembre 2015)")
+        st.caption("Métricas calculadas con TimeSeriesSplit (5 folds)")
+
+        st.markdown("**Comparativa de Modelos:**")
+        st.markdown(
+            """
+        | Modelo | RMSE | MAE | R² | Tipo |
+        |:-------|:-----|:----|:---|:-----|
+        | **Stacking Ensemble** | 0.03 | 0.01 | **0.999** | Ensemble |
+        | Random Forest | 0.03 | 0.01 | 0.999 | Tree-based |
+        | XGBoost | 0.15 | 0.09 | 0.984 | Gradient Boosting |
+        | MLP | 0.81 | 0.60 | 0.413 | Neural Network |
+        | LSTM-DNN | 0.81 | 0.60 | 0.413 | Neural Network |
+
+        **Conclusión:** Los modelos tree-based superan a Deep Learning en datasets tabulares pequeños.
+        """
+        )
 
         st.divider()
 
@@ -210,7 +244,63 @@ class AboutView:
 
         st.divider()
 
+        # Arquitectura del Sistema
+        st.subheader("Arquitectura del Sistema")
+
+        st.markdown("**Flujo de Comunicación (Frontend ↔ Backend):**")
+
+        st.code(
+            """
+┌─────────────────────────┐
+│  Usuario - Navegador   │
+└───────────┬─────────────┘
+            │
+            ▼
+┌─────────────────────────┐
+│ Frontend Streamlit :8501│
+└───────────┬─────────────┘
+            │
+            ▼
+┌─────────────────────────┐
+│  Cliente HTTP - httpx   │
+└───────────┬─────────────┘
+            │
+            ▼ POST /predict, GET /metrics, GET /health
+┌─────────────────────────┐
+│  Backend FastAPI :8000  │
+└───────────┬─────────────┘
+            │
+            ▼
+┌─────────────────────────┐
+│     Modelos ML/DL       │
+├─────────────────────────┤
+│ • stacking_model.pkl    │
+│ • mlp_model.keras       │
+│ • lstm_model.keras      │
+│ • scaler.pkl            │
+└─────────────────────────┘
+            """,
+            language="text",
+        )
+
+        st.markdown("**Tecnologías Principales:**")
+        st.markdown(
+            """
+        - **Backend**: FastAPI 0.115.0 + uvicorn 0.32.0 (ASGI Server)
+        - **Frontend**: Streamlit 1.52.0 + httpx 0.27.2 (Cliente HTTP)
+        - **ML Traditional**: scikit-learn 1.5.1 (RF, Stacking, TimeSeriesSplit)
+        - **ML Boosting**: XGBoost 2.1.0
+        - **Deep Learning**: TensorFlow 2.17.0 (MLP, LSTM-DNN)
+        - **Data Processing**: pandas 2.2.2, numpy 1.26.4, imbalanced-learn 0.12.3 (SMOTE)
+        - **Explicabilidad**: SHAP 0.46.0
+        - **Visualización**: Plotly 5.23.0
+        """
+        )
+
+        st.divider()
+
         # Footer
         st.caption(
             "**Desarrollado por:** [Esteban Garviso](https://github.com/estebangarviso) & [Felipe Ortega](https://github.com/piwinsi)"
         )
+        st.caption("**Universidad Andrés Bello** - ACIF104 Aprendizaje de Máquinas - 2025")

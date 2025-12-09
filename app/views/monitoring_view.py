@@ -112,7 +112,7 @@ class MonitoringView:
         with col3:
             st.info(
                 "**Reentrenar Modelos:** Ejecuta el pipeline completo de entrenamiento "
-                "y genera nuevos modelos en `models/`. Incluye XGBoost, Random Forest y Stacking.",
+                "y genera nuevos modelos en `models/`.",
                 icon=":material/psychology:",
             )
         with col4:

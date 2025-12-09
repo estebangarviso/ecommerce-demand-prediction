@@ -10,7 +10,7 @@ import os
 
 import streamlit as st
 
-# --- 1. Configuración de Página ---
+# Configuración de página
 st.set_page_config(
     page_title="Sistema Predictivo de Demanda",
     page_icon=":material/analytics:",
@@ -43,7 +43,7 @@ from app.views import PredictionView, MonitoringView, AboutView
 from app.ui_components import Sidebar, Header
 
 
-# --- 2. Carga de Recursos ---
+# Carga de recursos del sistema
 @st.cache_data
 def load_categories_map():
     """Carga el mapa de categorías desde el sistema."""
@@ -57,12 +57,7 @@ def load_cached_system():
 
 
 def initialize_application():
-    """
-    Inicializa la aplicación cargando recursos y configurando el estado.
-
-    Returns:
-        Tupla con los componentes inicializados
-    """
+    """Inicializa la aplicación cargando recursos y configurando el estado."""
     # Cargar recursos
     category_map = load_categories_map()
     model, _features, shap_model, cat_prices = load_cached_system()
@@ -81,6 +76,25 @@ def initialize_application():
         DEFAULT_PRICE, DEFAULT_PRICE_MIN, DEFAULT_PRICE_MAX, cat_prices, first_category
     )
 
+    # Sincronizar rolling windows con la API si no está inicializado
+    if SessionStateManager.get_value(SessionStateManager.ROLLING_WINDOWS) is None:
+        try:
+            import httpx
+
+            with httpx.Client(timeout=5.0) as client:
+                response = client.get("http://localhost:8000/health")
+                if response.status_code == 200:
+                    health_data = response.json()
+                    api_rolling_windows = health_data.get("model_metrics", {}).get(
+                        "rolling_windows", [3, 6]
+                    )
+                    SessionStateManager.update_rolling_windows(api_rolling_windows)
+                else:
+                    SessionStateManager.update_rolling_windows([3, 6])
+        except Exception:
+            # Si falla, usar valor por defecto
+            SessionStateManager.update_rolling_windows([3, 6])
+
     # Inicializar servicios
     pricing_service = PricingService(
         cat_prices,
@@ -91,7 +105,8 @@ def initialize_application():
         PRICE_RANGE_MAX_MULTIPLIER,
     )
 
-    prediction_service = PredictionService(model, shap_model)
+    # Inicializar servicio de predicción (solo API REST)
+    prediction_service = PredictionService(shap_model)
 
     # Configuración de tema para SHAP
     theme_config = {
@@ -122,10 +137,13 @@ def main():
         lag_1,
         lag_2,
         lag_3,
+        rolling_windows,
         predict_btn,
     ) = sidebar.render()
 
     # Preparar datos de entrada
+    # Las rolling_windows configuradas en el sidebar se envían a la API
+    # para calcular las features dinámicamente
     input_data = {
         "shop_cluster": shop_cluster,
         "item_category_id": item_category_id,
@@ -133,6 +151,7 @@ def main():
         "item_cnt_lag_1": lag_1,
         "item_cnt_lag_2": lag_2,
         "item_cnt_lag_3": lag_3,
+        "rolling_windows": rolling_windows,
     }
 
     # Renderizar tabs principales

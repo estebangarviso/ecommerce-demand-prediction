@@ -13,15 +13,7 @@ class TrendAnalyzer:
 
     @staticmethod
     def get_trend_status(delta: float) -> Tuple[str, str, str]:
-        """
-        Obtiene el estado de la tendencia basado en el delta.
-
-        Args:
-            delta: Diferencia entre predicción y valor anterior
-
-        Returns:
-            Tupla con (mensaje, icono, modo_delta)
-        """
+        """Determina el estado de la tendencia según el delta (mensaje, icono, modo)."""
         if delta > 0:
             return (
                 f"Tendencia al alza (+{delta:.1f})",
@@ -45,19 +37,7 @@ class TrendAnalyzer:
         positive_color: str,
         negative_color: str,
     ) -> list:
-        """
-        Obtiene los colores para el gráfico de tendencia.
-
-        Args:
-            prediction: Valor predicho
-            last_value: Último valor histórico
-            historical_color: Color para valores históricos
-            positive_color: Color para predicción positiva
-            negative_color: Color para predicción negativa
-
-        Returns:
-            Lista de colores para el gráfico
-        """
+        """Retorna colores para el gráfico de tendencia basados en la predicción."""
         colors = [historical_color] * 3
         colors.append(positive_color if prediction >= last_value else negative_color)
         return colors

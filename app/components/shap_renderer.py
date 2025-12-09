@@ -10,12 +10,7 @@ class SHAPRenderer:
     """Renderizador de gráficos SHAP con soporte de temas."""
 
     def __init__(self, theme_config: Dict[str, str]):
-        """
-        Inicializa el renderizador SHAP.
-
-        Args:
-            theme_config: Diccionario con configuración de colores del tema
-        """
+        """Inicializa el renderizador con la configuración de colores del tema."""
         self.theme_config = theme_config
 
     def detect_theme(self) -> str:
@@ -23,13 +18,7 @@ class SHAPRenderer:
         return "dark" if st.get_option("theme.base") == "dark" else "light"
 
     def render(self, plot: Any, height: Optional[int] = None) -> None:
-        """
-        Renderiza un gráfico SHAP con estilos adaptados al tema.
-
-        Args:
-            plot: Gráfico SHAP a renderizar
-            height: Altura del componente en píxeles
-        """
+        """Renderiza un gráfico SHAP adaptado al tema actual."""
         theme = self.detect_theme()
 
         bg_color = (

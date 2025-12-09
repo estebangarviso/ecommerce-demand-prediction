@@ -14,5 +14,5 @@ class Header:
             st.markdown("# :material/query_stats:")
         with col_h2:
             st.title("Sistema Predictivo de Demanda")
-            st.markdown("Ensamble Stacking & Clustering")
+            st.markdown("Ensamble Stacking & Deep Learning • API REST")
         st.divider()

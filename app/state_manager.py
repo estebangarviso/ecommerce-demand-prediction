@@ -13,6 +13,7 @@ class SessionStateManager:
     PRICE_MAX = "price_max"
     LAST_CATEGORY = "last_category"
     SELECTED_CATEGORY = "selected_category_key"
+    ROLLING_WINDOWS = "rolling_windows"
 
     @staticmethod
     def initialize_state(
@@ -63,3 +64,13 @@ class SessionStateManager:
     def set_value(key: str, value: Any) -> None:
         """Establece un valor en el estado de la sesión."""
         st.session_state[key] = value
+
+    @staticmethod
+    def get_current_rolling_windows() -> list:
+        """Obtiene las rolling windows actuales del modelo."""
+        return st.session_state.get(SessionStateManager.ROLLING_WINDOWS, [3, 6])
+
+    @staticmethod
+    def update_rolling_windows(rolling_windows: list) -> None:
+        """Actualiza las rolling windows en el estado de sesión."""
+        st.session_state[SessionStateManager.ROLLING_WINDOWS] = rolling_windows
