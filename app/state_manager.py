@@ -14,6 +14,9 @@ class SessionStateManager:
     LAST_CATEGORY = "last_category"
     SELECTED_CATEGORY = "selected_category_key"
     ROLLING_WINDOWS = "rolling_windows"
+    PENDING_PREDICTION = (
+        "pending_prediction"  # Flag para mantener predicción activa después de reentrenamiento
+    )
 
     @staticmethod
     def initialize_state(
@@ -74,3 +77,19 @@ class SessionStateManager:
     def update_rolling_windows(rolling_windows: list) -> None:
         """Actualiza las rolling windows en el estado de sesión."""
         st.session_state[SessionStateManager.ROLLING_WINDOWS] = rolling_windows
+
+    @staticmethod
+    def set_pending_prediction(pending: bool = True) -> None:
+        """Marca que hay una predicción pendiente de mostrar después del reentrenamiento."""
+        st.session_state[SessionStateManager.PENDING_PREDICTION] = pending
+
+    @staticmethod
+    def has_pending_prediction() -> bool:
+        """Verifica si hay una predicción pendiente de mostrar."""
+        return st.session_state.get(SessionStateManager.PENDING_PREDICTION, False)
+
+    @staticmethod
+    def clear_pending_prediction() -> None:
+        """Limpia el flag de predicción pendiente."""
+        if SessionStateManager.PENDING_PREDICTION in st.session_state:
+            del st.session_state[SessionStateManager.PENDING_PREDICTION]

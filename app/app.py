@@ -8,6 +8,9 @@ técnicas de Machine Learning.
 import sys
 import os
 
+# Agregar el directorio padre al path para imports absolutos
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import streamlit as st
 
 # Configuración de página
@@ -17,11 +20,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
-
-# Agregar directorio raíz al path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-from src.inference import load_system, get_unique_categories
 
 # Importar módulos de la aplicación
 from app.config import (
@@ -43,29 +41,31 @@ from app.views import PredictionView, MonitoringView, AboutView
 from app.ui_components import Sidebar, Header
 
 
-# Carga de recursos del sistema
-@st.cache_data
-def load_categories_map():
-    """Carga el mapa de categorías desde el sistema."""
-    return get_unique_categories()
-
-
-@st.cache_resource
-def load_cached_system():
-    """Carga el sistema de predicción (modelo, features, etc.)."""
-    return load_system()
-
-
 def initialize_application():
-    """Inicializa la aplicación cargando recursos y configurando el estado."""
-    # Cargar recursos
-    category_map = load_categories_map()
-    model, _features, shap_model, cat_prices = load_cached_system()
+    """Inicializa la aplicación cargando recursos desde la API."""
+    # Inicializar servicio de predicción (se conecta a la API)
+    prediction_service = PredictionService()
 
-    # Validar modelo
-    if model is None:
+    # Verificar que la API esté disponible
+    api_connected, health_data = prediction_service.check_api_health()
+    if not api_connected:
         st.error(
-            "Modelo no encontrado. Ejecuta `pipenv run train`.",
+            "No se puede conectar a la API. Asegúrate de que esté corriendo en http://localhost:8000",
+            icon=":material/cloud_off:",
+        )
+        st.stop()
+
+    # Extraer datos del health check
+    model_metrics = health_data.get("model_metrics", {})
+    rolling_windows = model_metrics.get("rolling_windows", [3, 6])
+
+    # Cargar categorías y precios desde la API (mediante PredictionService)
+    category_map = prediction_service.get_categories()
+    cat_prices = prediction_service.get_category_prices()
+
+    if not category_map:
+        st.error(
+            "No se pudieron cargar las categorías desde la API.",
             icon=":material/folder_off:",
         )
         st.stop()
@@ -76,26 +76,10 @@ def initialize_application():
         DEFAULT_PRICE, DEFAULT_PRICE_MIN, DEFAULT_PRICE_MAX, cat_prices, first_category
     )
 
-    # Sincronizar rolling windows con la API si no está inicializado
-    if SessionStateManager.get_value(SessionStateManager.ROLLING_WINDOWS) is None:
-        try:
-            import httpx
+    # Configurar rolling windows desde la API
+    SessionStateManager.update_rolling_windows(rolling_windows)
 
-            with httpx.Client(timeout=5.0) as client:
-                response = client.get("http://localhost:8000/health")
-                if response.status_code == 200:
-                    health_data = response.json()
-                    api_rolling_windows = health_data.get("model_metrics", {}).get(
-                        "rolling_windows", [3, 6]
-                    )
-                    SessionStateManager.update_rolling_windows(api_rolling_windows)
-                else:
-                    SessionStateManager.update_rolling_windows([3, 6])
-        except Exception:
-            # Si falla, usar valor por defecto
-            SessionStateManager.update_rolling_windows([3, 6])
-
-    # Inicializar servicios
+    # Inicializar servicio de pricing
     pricing_service = PricingService(
         cat_prices,
         DEFAULT_PRICE,
@@ -104,9 +88,6 @@ def initialize_application():
         PRICE_RANGE_MULTIPLIER,
         PRICE_RANGE_MAX_MULTIPLIER,
     )
-
-    # Inicializar servicio de predicción (solo API REST)
-    prediction_service = PredictionService(shap_model)
 
     # Configuración de tema para SHAP
     theme_config = {
@@ -122,7 +103,7 @@ def initialize_application():
 
 def main():
     """Función principal de la aplicación."""
-    # Inicializar aplicación
+    # Inicializar aplicación (conecta a la API)
     category_map, pricing_service, prediction_service, shap_renderer = initialize_application()
 
     # Renderizar header
@@ -162,11 +143,12 @@ def main():
         prediction_view.render(predict_btn, input_data)
 
     with tab_monitor:
-        monitoring_view = MonitoringView()
+        monitoring_view = MonitoringView(prediction_service)
         monitoring_view.render()
 
     with tab_info:
-        AboutView.render()
+        about_view = AboutView(prediction_service)
+        about_view.render()
 
 
 if __name__ == "__main__":

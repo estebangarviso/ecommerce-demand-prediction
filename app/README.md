@@ -1,41 +1,41 @@
-# Arquitectura Modular - Sistema Predictivo de Demanda
+# Arquitectura Modular Frontend - Sistema Predictivo de Demanda
 
 ## Descripción General
 
-La aplicación frontend está construida con **Streamlit** siguiendo los principios **SOLID** y patrones de diseño modernos. La arquitectura modular facilita el mantenimiento, testing y escalabilidad del sistema.
+La aplicación frontend está construida con **Streamlit** siguiendo los principios **SOLID** y patrones de diseño modernos para garantizar mantenibilidad, testabilidad y escalabilidad.
 
-**Arquitectura Desacoplada:** El frontend se comunica exclusivamente con el Backend REST API (FastAPI) mediante HTTP. No hay carga local de modelos.
+**Arquitectura Cliente-Servidor:** El frontend actúa como cliente HTTP stateless que se comunica exclusivamente con el Backend REST API (FastAPI) mediante `httpx`. No hay carga local de modelos - toda la lógica de ML/DL reside en el backend.
 
 ## Estructura del Proyecto
 
 ```text
 app/
-├── app.py                          # Punto de entrada principal
-├── config.py                       # Configuraciones centralizadas
-├── state_manager.py                # Gestión de estado (Singleton Pattern)
+├── app.py                          # Punto de entrada principal - Router de vistas
+├── config.py                       # Configuraciones centralizadas del sistema
+├── state_manager.py                # Gestión de estado de sesión (Singleton Pattern)
 │
-├── services/                       # Lógica de negocio
+├── services/                       # Lógica de negocio del cliente
 │   ├── __init__.py
 │   ├── pricing_service.py          # Gestión de precios dinámicos por categoría
-│   ├── prediction_service.py       # Cliente HTTP para API REST (httpx)
-│   └── trend_analyzer.py           # Análisis de tendencias y deltas
+│   ├── prediction_service.py       # Cliente HTTP REST con httpx (timeout 30s)
+│   └── trend_analyzer.py           # Análisis de tendencias, deltas y momentum
 │
-├── components/                     # Componentes de visualización
+├── components/                     # Componentes de visualización reutilizables
 │   ├── __init__.py
 │   ├── chart_builder.py            # Constructor de gráficos Plotly (Builder Pattern)
-│   ├── shap_renderer.py            # Renderizado SHAP con soporte dark/light theme
-│   └── dataframe_builder.py        # Constructor de DataFrames para visualización
+│   ├── shap_renderer.py            # Renderizado SHAP waterfall (dark/light theme)
+│   └── dataframe_builder.py        # Constructor de DataFrames con formato consistente
 │
-├── views/                          # Vistas principales de la aplicación
+├── views/                          # Vistas principales de navegación
 │   ├── __init__.py
-│   ├── prediction_view.py          # Vista de análisis predictivo (KPIs, SHAP, gráficos)
-│   ├── monitoring_view.py          # Vista de salud del modelo + Panel de mantenimiento
-│   └── about_view.py               # Vista de información del proyecto
+│   ├── prediction_view.py          # Vista de predicción (KPIs + SHAP + gráficos temporales)
+│   ├── monitoring_view.py          # Dashboard de salud del modelo + mantenimiento
+│   └── about_view.py               # Documentación técnica dinámica (carga metrics.json)
 │
 └── ui_components/                  # Componentes de interfaz de usuario
     ├── __init__.py
-    ├── sidebar.py                  # Barra lateral con formulario de predicción
-    └── header.py                   # Encabezado con branding
+    ├── sidebar.py                  # Formulario de predicción con validaciones
+    └── header.py                   # Encabezado con branding y navegación
 ```
 
 ## Principios SOLID Aplicados
@@ -126,29 +126,26 @@ graph TB
 **Métodos principales:**
 #### `prediction_service.py` - **PredictionService**
 
-- Cliente HTTP para comunicación con Backend API REST
+- Cliente HTTP REST para comunicación con Backend API
 - Realiza predicciones mediante POST a `/predict`
-- Maneja errores de conexión y timeouts
-- **NO carga modelos localmente** (arquitectura desacoplada)
+- Obtiene valores SHAP mediante el endpoint `/predict` (incluidos en response)
+- Maneja errores de conexión, timeouts y validaciones HTTP
+- **NO carga modelos localmente** (arquitectura stateless Cliente-Servidor)
 
 **Métodos principales:**
 
 ```python
-predict(input_data: Dict) -> float          # POST a API REST
-check_api_health() -> bool                  # GET a /health
-_handle_api_error(error: Exception) -> None # Manejo de errores HTTP
+predict(input_data: Dict) -> float          # POST /predict - Retorna predicción
+calculate_shap_values(...) -> Explanation   # Extrae SHAP del response JSON
+check_api_health() -> bool                  # GET /health - Verifica disponibilidad
+_handle_api_error(error: Exception) -> None # Gestión de errores HTTP/Connection
 ```
 
 **Dependencias:**
-- `httpx.Client` para requests HTTP
+- `httpx.Client` para requests HTTP síncronos
 - Timeout de 30 segundos por request
 - Validación de disponibilidad de API antes de predicción
-**Métodos principales:**
-
-```python
-predict(input_data: Dict) -> float
-get_shap_values(input_data: Dict) -> Tuple[np.ndarray, np.ndarray]
-```
+- Fallback a valores default en caso de error de conexión
 
 #### `trend_analyzer.py` - **TrendAnalyzer**
 
@@ -210,65 +207,112 @@ create_monitoring_dataframe(dates, residuals) -> pd.DataFrame
 
 #### `prediction_view.py` - **PredictionView**
 
-- Vista principal de análisis predictivo
-- Renderiza KPIs, gráficos SHAP y proyecciones temporales
-- Maneja estados: espera, cálculo, resultados
+- Vista principal de análisis predictivo con 3 secciones:
+  1. **KPIs:** Demanda predicha, ventas esperadas, tendencia vs mes anterior + Interpretación textual automática de SHAP
+  2. **SHAP Waterfall Plot:** Contribución de features con matplotlib (reemplaza force_plot deprecated)
+  3. **Proyección Temporal:** Gráfico de barras con histórico (3 lags) + predicción futura
+- Maneja estados de UI: espera, cálculo en progreso, resultados disponibles
+- Integra `PredictionService` para llamadas HTTP al backend
+- Gestiona flag `PENDING_PREDICTION` para mostrar predicción después de reentrenamiento
+
+**Métodos clave:**
+
+```python
+render() -> None                            # Orquesta renderizado completo
+_render_kpi_section(...) -> None            # KPIs + Interpretación textual de SHAP
+_render_shap_section(...) -> None           # Waterfall plot con matplotlib
+_render_temporal_projection(...) -> None    # Gráfico de tendencia temporal
+_calculate_shap_explanation(...) -> Explanation # Helper para obtener SHAP una sola vez
+_render_textual_interpretation(...) -> None # Traduce SHAP a lenguaje natural
+```
+
 #### `monitoring_view.py` - **MonitoringView**
 
-- Vista de salud y rendimiento del modelo
-- Consume métricas desde API REST (GET `/metrics`)
-- Métricas: RMSE, MAE, R² Score de todos los modelos
-- Gráficos de estabilidad y distribución de errores
-- **Panel de Mantenimiento del Sistema**
+- Dashboard de salud del sistema con 2 paneles principales:
+  1. **Métricas de Modelos:** Tabla comparativa (RMSE, MAE, R²) consumida desde GET `/metrics`
+  2. **Panel de Mantenimiento:** Acciones de operaciones (regenerar datos, reentrenar modelos)
+- Visualización dinámica de estado del backend (health checks)
+- Gráficos de distribución de errores y estabilidad temporal
 
 **Panel de Mantenimiento:**
 
 1. **Regenerar Datasets:**
    - Botón para forzar descarga desde KaggleHub
-   - Actualiza automáticamente `data/`
-   - Validación de archivos y mensajes de estado
+   - Actualiza automáticamente `data/` con archivos CSV
+   - Validación de integridad de archivos descargados
+   - Mensajes de estado (success/error/warning)
 
 2. **Reentrenar Modelos:**
-   - Botón para ejecutar pipeline de entrenamiento
-   - Genera nuevos modelos en `models/`
-   - Requiere reinicio del Backend API para cargar nuevos modelos
+   - Botón para ejecutar pipeline completo de entrenamiento (`src/train.py`)
+   - Genera nuevos artefactos en `models/` (.pkl, .keras, metrics.json)
+   - **Requiere reinicio manual del Backend API** para cargar nuevos modelos en memoria
+   - Actualiza `metrics.json` con nuevas métricas de validación
 
 #### `about_view.py` - **AboutView**
 
-- Vista de información del proyecto
-- Descripción de arquitectura y tecnologías
-- Integrantes del equipo
-- Documentación de uso
-   - Carga nuevos modelos sin reiniciar
+- Dashboard técnico ejecutivo con documentación dinámica del sistema
+- **NO contiene métricas hardcodeadas** - todo se carga desde `models/metrics.json`
+- Secciones principales:
+  1. **Resumen Ejecutivo:** Problema de negocio + mejor modelo (dinámico)
+  2. **Arquitectura Cliente-Servidor:** Diagrama Mermaid interactivo
+  3. **Evaluación de Rendimiento:** Tabla de métricas cargada desde JSON
+  4. **Ingeniería de Características:** Descripción de features con iconos :material/
+  5. **Metodología CRISP-DM:** Tabs con fases 1-6
+  6. **Explicabilidad SHAP:** Teoría y ventajas
+  7. **Validación Temporal:** TimeSeriesSplit con ejemplos
+  8. **Stack Tecnológico:** Listado completo de dependencias
+  9. **Limitaciones:** Consideraciones y recomendaciones
+  10. **Guía de Uso:** Instrucciones de inicialización (2 terminales)
 
-#### `architecture_view.py` - **ArchitectureView**
+**Características técnicas:**
+- Método `_load_metrics()` lee `models/metrics.json` dinámicamente
+- Manejo de errores si el archivo no existe (muestra warning)
+- Uso exclusivo de iconos `:material/` (sin emojis nativos)
+- Colores de Streamlit en todos los componentes UI
+- Comentarios profesionales en estilo humano (sin "IA-generated feel")
+### Capa de UI Components (ui_components/)
+
 #### `sidebar.py` - **Sidebar**
 
-- Barra lateral con formulario de predicción simplificado
-- Selector de categoría con callback dinámico
-- Inputs: shop_cluster, item_price, lag_1, lag_2, lag_3
-- Gráfico de tendencia de lags
-- Botón de predicción
+- Formulario lateral de configuración de predicción
+- Componentes principales:
+  1. **Selector de Categoría:** Dropdown con callback dinámico que actualiza rango de precio
+  2. **Selector de Cluster:** Radio buttons con descripción (Pequeña, Supermercado, Megatienda)
+  3. **Input de Precio:** Number input con rango dinámico (±200% promedio de categoría)
+  4. **Ventas Históricas:** 3 inputs numéricos (lag_1, lag_2, lag_3)
+  5. **Rolling Windows:** 2 inputs configurables (default: 3 y 6 meses)
+  6. **Gráfico de Tendencia:** Visualización de lags con `ChartBuilder`
+  7. **Botón de Predicción:** Trigger para cálculo de demanda
 
 **Características:**
+- Integración con `PricingService` para precios dinámicos
+- Validación automática de inputs numéricos (no negativos)
+- Estado persistente con `SessionStateManager`
+- **Rolling windows configurables** en cada predicción (permite reentrenamiento)
+- Callback `on_category_change()` para actualizar precio automáticamente
 
-- Actualización automática de precio al cambiar categoría
-- Validación de inputs numéricos
-- Integración con `PricingService`
-- **Sin configuración de API** (modo REST exclusivo)
-- Botón de predicción
+**Métodos principales:**
 
-**Características:**
-
-- Actualización automática de precio al cambiar categoría
-- Validación de inputs
-- Integración con `PricingService`
+```python
+render() -> Dict[str, Any]              # Renderiza formulario completo
+on_category_change() -> None            # Callback para cambio de categoría
+_render_category_selector() -> int      # Selector de categoría con callback
+_render_price_input() -> float          # Input de precio con rango dinámico
+_render_sales_history() -> Tuple        # 3 inputs para lags
+_render_rolling_windows() -> Tuple      # 2 inputs para ventanas temporales
+```
 
 #### `header.py` - **Header**
 
-- Encabezado de la aplicación
-- Logo y título con íconos Material Design
-- Estilo consistente
+- Encabezado de la aplicación con branding consistente
+- Logo y título con íconos Material Design (`:material/shopping_cart:`)
+- Subtítulo descriptivo del sistema
+- Estilo CSS custom para alineación y colores
+
+**Características:**
+- Uso de `st.markdown` con HTML personalizado
+- Iconos `:material/` exclusivamente
+- Colores de Streamlit theme-aware
 
 ### Gestión de Estado (state_manager.py)
 

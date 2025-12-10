@@ -13,19 +13,14 @@ class SHAPRenderer:
         """Inicializa el renderizador con la configuración de colores del tema."""
         self.theme_config = theme_config
 
-    def detect_theme(self) -> str:
-        """Detecta el tema actual de Streamlit."""
-        return "dark" if st.get_option("theme.base") == "dark" else "light"
-
     def render(self, plot: Any, height: Optional[int] = None) -> None:
         """Renderiza un gráfico SHAP adaptado al tema actual."""
-        theme = self.detect_theme()
 
         bg_color = (
-            self.theme_config["dark_bg"] if theme == "dark" else self.theme_config["light_bg"]
+            self.theme_config["dark_bg"] if st.context.theme.type == "dark" else self.theme_config["light_bg"]
         )
         text_color = (
-            self.theme_config["dark_text"] if theme == "dark" else self.theme_config["light_text"]
+            self.theme_config["dark_text"] if st.context.theme.type == "dark" else self.theme_config["light_text"]
         )
 
         shap_html = f"""

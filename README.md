@@ -8,13 +8,14 @@ Este repositorio contiene el proyecto final para la asignatura **Aprendizaje de 
   - **24+ features engineered**: Momentum (deltas, aceleración), Sensibilidad al Precio (elasticidad, ingresos), Desviaciones (z-scores, volatilidad)
   - **Exactamente 2 ventanas rolling parametrizables** (default: 3 y 6 meses)
   - Balanceo con SMOTE opcional
-- 🌐 **Arquitectura Desacoplada**: Backend REST API (FastAPI) + Frontend (Streamlit) con comunicación HTTP
-- 🔄 **MLOps Best Practices**: Validación temporal, sincronización automática de dependencias, versionado de modelos
+- 🌐 **Arquitectura Desacoplada Cliente-Servidor**: Backend REST API (FastAPI) + Frontend Interactivo (Streamlit)
+- 🔍 **Explicabilidad con SHAP**: Waterfall plots + interpretación en lenguaje natural
+- 🔄 **MLOps Best Practices**: Validación temporal con TimeSeriesSplit, versionado de modelos, sincronización automática de dependencias
 
 ## Integrantes del Equipo
 
-* **Esteban Garviso**
-* **Felipe Ortega**
+* **Esteban Garviso** - [GitHub](https://github.com/estebangarviso)
+* **Felipe Ortega** - [GitHub](https://github.com/piwinsi)
 
 ## Estructura del Proyecto
 
@@ -124,24 +125,32 @@ pipenv run start
   - **Momentum:** Deltas (delta_1_2, evolution_3m), promedios y dirección de tendencia
   - **Sensibilidad al Precio:** Cambios porcentuales, elasticidad precio-demanda, ingreso potencial
   - **Desviaciones:** Z-scores, diferencias vs promedio, coeficientes de volatilidad
-  - **Rolling Windows:** 2 ventanas temporales parametrizables (mean + std)
+  - **Rolling Windows:** 2 ventanas temporales configurables (default: 3 y 6 meses)
   - **Clustering K-Means:** Segmentación automática de tiendas
-  - **Balanceo SMOTE:** Opcional para clases desbalanceadas
-- **API REST con FastAPI:** 5 endpoints documentados con Swagger UI
-- **Frontend Streamlit:** Interfaz interactiva con explicabilidad SHAP
-- **Validación Temporal:** TimeSeriesSplit para prevenir data leakage
+  - **Balanceo SMOTE:** Opcional para regresión con clases desbalanceadas
+- **API REST con FastAPI:** 5 endpoints documentados con Swagger UI interactivo
+- **Frontend Streamlit:** Interfaz moderna con explicabilidad SHAP waterfall + interpretación textual
+- **Validación Temporal:** TimeSeriesSplit (5 folds) para prevenir data leakage
+- **Restricciones Monotónicas:** En XGBoost para coherencia económica (precio ↑ → demanda ↓)
 - **Sistema de Respaldo:** Gestión automática de datasets con KaggleHub
 
-📖 **Detalles técnicos:** Ver [docs/TECHNICAL_DETAILS.md](docs/TECHNICAL_DETAILS.md)  
-📖 **Documentación API:** Ver [docs/API.md](docs/API.md)
+📖 **Documentación Técnica Completa:** Ejecuta la aplicación y ve a la pestaña "Acerca de"  
+📖 **Detalles de Implementación:** Ver [docs/TECHNICAL_DETAILS.md](docs/TECHNICAL_DETAILS.md)  
+📖 **API Endpoints:** Ver [docs/API.md](docs/API.md) o http://localhost:8000/docs
 
 ## Capturas de Pantalla
 
-### Vista de Predicción
+### Vista de Predicción con SHAP Waterfall + Interpretación Textual
 ![Vista de Predicción](docs/screenshots/prediction-view.png)
 
-### Panel de Monitoreo
+*La vista muestra KPIs principales (demanda predicha, ventas esperadas, tendencia), gráfico SHAP waterfall con contribución de features, e interpretación automática en lenguaje natural.*
+
+### Panel de Monitoreo con Métricas Dinámicas
 ![Panel de Monitoreo](docs/screenshots/monitoring-view.png)
+
+*Dashboard de salud del sistema mostrando métricas de todos los modelos, comparativas de rendimiento y estado del servicio backend.*
+
+**📖 Ver documentación técnica completa en la pestaña "Acerca de" dentro de la aplicación Streamlit.**
 
 ## Tecnologías Utilizadas
 
@@ -155,28 +164,44 @@ pipenv run start
 
 ## Métricas de los Modelos
 
-Comparativa de rendimiento (dataset de validación con TimeSeriesSplit):
+Para ver las **métricas actualizadas** de todos los modelos entrenados (RMSE, MAE, R²), consulta la **sección "Dashboard Técnico"** dentro de la aplicación Streamlit en la pestaña **"Acerca de"**.
 
-| Modelo            | RMSE  | MAE   | R²        | Tipo              | Estado             |
-| :---------------- | :---- | :---- | :-------- | :---------------- | :----------------- |
-| **Random Forest** | 0.028 | 0.017 | **0.999** | Tree-based        | ✅ Óptimo           |
-| XGBoost           | 0.120 | 0.052 | 0.984     | Gradient Boosting | ✅ Excelente        |
-| Stacking Ensemble | 0.821 | 0.807 | 0.276     | Ensemble          | ⚠️ Bajo rendimiento |
-| MLP               | 0.791 | 0.591 | 0.327     | Neural Network    | ⚠️ Requiere ajuste  |
-| LSTM-DNN          | 6.348 | 6.271 | -42.330   | Neural Network    | ❌ Fallo crítico    |
+Las métricas se cargan dinámicamente desde `models/metrics.json` y reflejan el rendimiento real validado con **TimeSeriesSplit** (5 folds).
 
-**Conclusiones:**
-- **Random Forest es el modelo ganador** con R²=0.999, superando incluso al Stacking Ensemble
-- Los modelos tree-based (RF, XGBoost) superan significativamente a Deep Learning en datos tabulares pequeños
-- **El Stacking Ensemble tiene rendimiento inferior** (R²=0.276) a sus estimadores base, posiblemente por:
-  - Overfitting del meta-estimador en validación temporal
-  - Desbalance en los pesos de combinación
-  - Incompatibilidad entre predicciones de estimadores heterogéneos
-- **LSTM-DNN falló completamente** (R²=-42.33) indicando divergencia en entrenamiento
-- Deep Learning requiere datasets más grandes para convergencia óptima
-- TimeSeriesSplit previene overfitting temporal y data leakage
+**Modelos Evaluados:**
+- Random Forest (Tree-based)
+- XGBoost (Gradient Boosting con restricciones monotónicas)
+- MLP (Red Neuronal Densa)
+- LSTM-DNN (Red Neuronal Recurrente)
+- Stacking Ensemble (Random Forest + XGBoost + Meta-estimador)
 
-**Recomendación:** Usar **Random Forest** como modelo de producción por su estabilidad y rendimiento superior
+**Nota:** Los modelos basados en árboles (Random Forest, XGBoost) generalmente muestran mejor rendimiento en datasets tabulares de tamaño moderado. Consulta la documentación técnica en la app para análisis detallado.
+
+## Arquitectura del Sistema
+
+El sistema implementa el patrón **Cliente-Servidor** con separación clara de responsabilidades:
+
+**Backend (FastAPI):**
+- Servidor ASGI con uvicorn
+- 5 endpoints REST: `/predict`, `/health`, `/metrics`, `/schema`, `/retrain`
+- Validación de datos con Pydantic
+- Carga de modelos serializados (.pkl, .keras)
+- Feature engineering centralizado
+
+**Frontend (Streamlit):**
+- Cliente HTTP con httpx
+- UI interactiva con 3 vistas principales
+- Visualización SHAP con waterfall plots
+- Interpretación en lenguaje natural de predicciones
+- KPIs y gráficos temporales con Plotly
+
+**Comunicación:**
+```
+Usuario → Streamlit UI → HTTP Request (JSON) → FastAPI → Modelos ML/DL
+         ← Streamlit UI ← HTTP Response (JSON) ← FastAPI ← Predicción + SHAP
+```
+
+Ver **diagrama Mermaid completo** en la pestaña "Acerca de" dentro de la aplicación.
 
 ## Documentación Adicional
 
@@ -184,6 +209,7 @@ Comparativa de rendimiento (dataset de validación con TimeSeriesSplit):
 - 🔧 [Detalles Técnicos](docs/TECHNICAL_DETAILS.md) - Metodología, arquitectura y features
 - 🌐 [Documentación API](docs/API.md) - Endpoints y ejemplos de uso
 - 🏗️ [Arquitectura Frontend](app/README.md) - Patrones SOLID y estructura modular
+- 🐳 [Deployment con Docker](docs/DOCKER.md) - Guía de Deployment con Docker
 
 ## Universidad Andrés Bello - 2025
 

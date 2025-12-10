@@ -364,6 +364,11 @@ async def root():
             "predict": "/predict (POST - schema dinámico según rolling windows)",
             "schema": "/schema (GET - obtener schema de entrada dinámico)",
             "metrics": "/metrics",
+            "categories": "/categories (GET - obtener todas las categorías)",
+            "prices": "/prices (GET - obtener todos los precios por categoría)",
+            "price_by_category": "/prices/{category_id} (GET - precio de una categoría)",
+            "regenerate_datasets": "/regenerate-datasets (POST - regenerar datasets desde KaggleHub)",
+            "retrain": "/retrain (POST - reentrenar modelo con nuevas configuraciones)",
             "docs": "/docs",
         },
         "rolling_windows": ModelState.rolling_windows,
@@ -509,6 +514,34 @@ async def predict(request: Request):
         raise HTTPException(status_code=500, detail=f"Error en la predicción: {str(e)}") from e
 
 
+@app.get("/categories")
+async def get_categories():
+    """Retorna el mapa completo de categorías (id -> nombre)."""
+    try:
+        import pandas as pd
+
+        categories_path = os.path.join(BASE_DIR, "data", "item_categories.csv")
+        if not os.path.exists(categories_path):
+            raise HTTPException(status_code=404, detail="Archivo de categorías no encontrado")
+
+        df = pd.read_csv(categories_path)
+        categories_dict = dict(zip(df["item_category_id"].astype(int), df["item_category_name"]))
+
+        return categories_dict
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al cargar categorías: {str(e)}")
+
+
+@app.get("/prices")
+async def get_all_prices():
+    """Retorna todos los precios promedio por categoría."""
+    if ModelState.category_prices is None:
+        raise HTTPException(status_code=404, detail="Precios no disponibles")
+
+    # Convertir a dict con valores float para serialización JSON
+    return {int(k): float(v) for k, v in ModelState.category_prices.items()}  # type: ignore
+
+
 @app.get("/prices/{category_id}")
 async def get_category_price(category_id: int):
     """Retorna el precio promedio para una categoría específica."""
@@ -522,6 +555,34 @@ async def get_category_price(category_id: int):
         "category_id": category_id,
         "average_price": float(ModelState.category_prices[category_id]),  # type: ignore
     }
+
+
+@app.post("/regenerate-datasets")
+async def regenerate_datasets():
+    """
+    Regenera los datasets descargándolos desde KaggleHub.
+
+    Este endpoint fuerza la descarga fresca de los datos desde KaggleHub
+    y actualiza la carpeta `data/`.
+    """
+    try:
+        from src.data_processing import force_download_datasets
+
+        print("\n🔄 Regenerando datasets desde KaggleHub...")
+
+        success = force_download_datasets()
+
+        if success:
+            return {"status": "success", "message": "Datasets regenerados exitosamente en `data/`"}
+        else:
+            raise HTTPException(
+                status_code=500, detail="Error al regenerar datasets. Revisa los logs del servidor."
+            )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Error durante la regeneración de datasets: {str(e)}"
+        )
 
 
 @app.post("/retrain", response_model=RetrainResponse)

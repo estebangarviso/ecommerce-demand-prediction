@@ -3,21 +3,58 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+from typing import Optional, Dict, TYPE_CHECKING
 
 from ..components import ChartBuilder, DataFrameBuilder
+
+if TYPE_CHECKING:
+    from services.prediction_service import PredictionService
 
 
 class MonitoringView:
     """Vista de monitoreo del modelo."""
 
-    def __init__(self):
-        """Inicializa la vista de monitoreo."""
+    def __init__(self, prediction_service: "PredictionService"):
+        """Inicializa la vista de monitoreo.
+
+        Args:
+            prediction_service: Servicio de predicción para verificar estado de la API
+        """
         self.chart_builder = ChartBuilder()
         self.df_builder = DataFrameBuilder()
+        self.prediction_service = prediction_service
 
     def render(self) -> None:
         """Renderiza la vista de monitoreo."""
         st.header(":material/speed: Panel de Salud del Modelo")
+
+        # Mostrar estado de conexión con la API
+        if self.prediction_service:
+            api_healthy, health_data = self._check_api_status()
+
+            if api_healthy:
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.success(
+                        f":material/check_circle: API Conectada - {self.prediction_service.api_url}",
+                        icon=":material/cloud_done:",
+                    )
+                with col2:
+                    if health_data and "model_metrics" in health_data:
+                        rolling_windows = health_data["model_metrics"].get("rolling_windows", [])
+                        st.metric(
+                            "Rolling Windows",
+                            f"{rolling_windows}",
+                            help="Configuración de ventanas temporales del modelo",
+                        )
+            else:
+                st.error(
+                    f":material/error: API Desconectada - {self.prediction_service.api_url}. "
+                    "Las predicciones no estarán disponibles.",
+                    icon=":material/cloud_off:",
+                )
+
+            st.divider()
 
         self._render_metrics()
         st.caption(
@@ -34,6 +71,18 @@ class MonitoringView:
         # Sección de mantenimiento
         st.divider()
         self._render_maintenance_section()
+
+    def _check_api_status(self) -> tuple[bool, Optional[Dict]]:
+        """Verifica el estado de la API y obtiene información del sistema.
+
+        Returns:
+            Tupla (is_healthy, health_data)
+        """
+        try:
+            is_healthy, health_data = self.prediction_service.check_api_health()
+            return is_healthy, health_data
+        except Exception:
+            return False, None
 
     def _render_metrics(self) -> None:
         """Renderiza las métricas del modelo."""
@@ -99,7 +148,7 @@ class MonitoringView:
             if st.button(
                 "Regenerar",
                 type="primary",
-                use_container_width=True,
+                width="stretch",
                 help="Fuerza la descarga desde KaggleHub",
                 key="btn_regenerate_datasets",
             ):
@@ -119,61 +168,62 @@ class MonitoringView:
             if st.button(
                 "Reentrenar",
                 type="primary",
-                use_container_width=True,
+                width="stretch",
                 help="Entrena los modelos con los datos actuales",
                 key="btn_retrain_models",
             ):
                 self._handle_retrain_models()
 
     def _handle_regenerate_datasets(self) -> None:
-        """Maneja la regeneración de datasets."""
-        with st.spinner("Descargando datasets desde KaggleHub..."):
-            try:
-                from src.data_processing import force_download_datasets
+        """Maneja la regeneración de datasets a través del servicio."""
+        with st.spinner("Descargando datasets desde KaggleHub vía API..."):
+            success, message = self.prediction_service.regenerate_datasets()
 
-                success = force_download_datasets()
-
-                if success:
-                    st.session_state.regenerate_status = {
-                        "type": "success",
-                        "message": "✅ Datasets regenerados exitosamente en `data/`",
-                    }
-                else:
-                    st.session_state.regenerate_status = {
-                        "type": "error",
-                        "message": "❌ Error al regenerar datasets. Revisa los logs en la terminal.",
-                    }
-            except Exception as e:
+            if success:
+                st.session_state.regenerate_status = {
+                    "type": "success",
+                    "message": f"✅ {message}",
+                }
+            else:
                 st.session_state.regenerate_status = {
                     "type": "error",
-                    "message": f"❌ Error al regenerar datasets: {str(e)}",
+                    "message": f"❌ {message}\n\n"
+                    "Alternativamente, ejecuta desde terminal:\n"
+                    "```bash\n"
+                    "pipenv run python -c 'from src.data_processing import force_download_datasets; force_download_datasets()'\n"
+                    "```",
                 }
 
         # Forzar rerun para mostrar los mensajes
         st.rerun()
 
     def _handle_retrain_models(self) -> None:
-        """Maneja el reentrenamiento de modelos."""
-        with st.spinner("Entrenando modelos... Esto puede tomar varios minutos."):
-            try:
-                from src.train import train_models
+        """Maneja el reentrenamiento de modelos a través del servicio."""
+        rolling_windows = st.session_state.get("rolling_windows", [3, 6])
 
-                # Ejecutar entrenamiento
-                train_models()
+        with st.spinner(f"Reentrenando modelos con rolling_windows={rolling_windows}..."):
+            success, message = self.prediction_service.retrain_model(
+                rolling_windows=rolling_windows,
+                use_balancing=False,  # Puedes agregar un checkbox en la UI
+            )
 
+            if success:
                 st.session_state.retrain_status = {
                     "type": "success",
-                    "message": "✅ Modelos reentrenados exitosamente en `models/`",
+                    "message": f"✅ {message}\n\nMétricas actualizadas en la API.",
                 }
 
-                # Limpiar caché de Streamlit para cargar nuevos modelos
+                # Limpiar caché de Streamlit
                 st.cache_data.clear()
                 st.cache_resource.clear()
-
-            except Exception as e:
+            else:
                 st.session_state.retrain_status = {
                     "type": "error",
-                    "message": f"❌ Error al reentrenar modelos: {str(e)}",
+                    "message": f"❌ {message}\n\n"
+                    "Alternativamente, ejecuta desde terminal:\n"
+                    "```bash\n"
+                    "pipenv run train\n"
+                    "```",
                 }
 
         # Forzar rerun para mostrar los mensajes y cargar nuevos modelos
