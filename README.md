@@ -1,21 +1,21 @@
-# Predicción de Demanda en E-commerce - Equipo 9 (ACIF104)
+# 🛒 Predicción de Demanda en E-commerce
 
-Este repositorio contiene el proyecto final para la asignatura **Aprendizaje de Máquinas (ACIF104)** de la Universidad Andrés Bello. El objetivo es desarrollar un sistema robusto de predicción de demanda para retail utilizando:
+Sistema de predicción de demanda para retail con **Machine Learning Avanzado** e **Interpretabilidad SHAP**, desarrollado para la asignatura **Aprendizaje de Máquinas (ACIF104)** de la Universidad Andrés Bello.
 
-- 🧠 **Machine Learning Avanzado**: Ensemble Stacking (Random Forest + XGBoost + meta-estimador) + Deep Learning (MLP + LSTM-DNN)
-- 📊 **Ingeniería de Features Avanzada**: 
-  - Clustering K-Means para segmentación de tiendas
-  - **24+ features engineered**: Momentum (deltas, aceleración), Sensibilidad al Precio (elasticidad, ingresos), Desviaciones (z-scores, volatilidad)
-  - **Exactamente 2 ventanas rolling parametrizables** (default: 3 y 6 meses)
-  - Balanceo con SMOTE opcional
-- 🌐 **Arquitectura Desacoplada Cliente-Servidor**: Backend REST API (FastAPI) + Frontend Interactivo (Streamlit)
-- 🔍 **Explicabilidad con SHAP**: Waterfall plots + interpretación en lenguaje natural
-- 🔄 **MLOps Best Practices**: Validación temporal con TimeSeriesSplit, versionado de modelos, sincronización automática de dependencias
-
-## Integrantes del Equipo
-
+**Equipo 9:**
 * **Esteban Garviso** - [GitHub](https://github.com/estebangarviso)
 * **Felipe Ortega** - [GitHub](https://github.com/piwinsi)
+
+---
+
+## ✨ Características Principales
+
+- 🤖 **5 Modelos ML/DL**: Random Forest, XGBoost, MLP, LSTM-DNN, Stacking Ensemble
+- 🧠 **Explicabilidad SHAP**: Interpretación visual y textual de predicciones
+- 🌐 **Arquitectura Cliente-Servidor**: FastAPI (backend) + Streamlit (frontend)
+- 📊 **24+ Features Engineered**: Clustering, rolling windows, elasticidad de precio
+- 🔄 **Validación Temporal**: TimeSeriesSplit para prevenir data leakage
+- 📈 **Análisis Técnico**: Exportación de métricas, SHAP y residuales
 
 ## Estructura del Proyecto
 
@@ -64,6 +64,8 @@ acif104_s9_equipo9/
 │   ├── state_manager.py    # Gestión de estado (Singleton)
 │   │
 │   ├── services/           # Lógica de negocio
+│   │   ├── data_exporter.py         # Exportación de métricas y SHAP a CSV
+│   │   ├── model_analyzer.py        # Análisis de métricas de modelos
 │   │   ├── pricing_service.py       # Precios dinámicos por categoría
 │   │   ├── prediction_service.py    # Cliente HTTP para API REST
 │   │   └── trend_analyzer.py        # Análisis de tendencias
@@ -78,22 +80,16 @@ acif104_s9_equipo9/
 │   │   └── sidebar.py      # Formulario de predicción
 │   │
 │   └── views/              # Vistas de navegación
-│       ├── prediction_view.py       # Vista principal de predicción
-│       ├── monitoring_view.py       # Dashboard de monitoreo
-│       └── about_view.py            # Información del proyecto
-```
-│   │
-│   ├── views/              # Vistas principales
-│   │   ├── prediction_view.py       # Análisis predictivo con KPIs y SHAP
-│   │   ├── monitoring_view.py       # Salud del modelo + Mantenimiento
-│   │   └── architecture_view.py     # Documentación técnica
-│   │
-│   └── ui_components/      # Componentes de UI
-│       ├── sidebar.py               # Controles laterales y formularios
-│       └── header.py                # Encabezado de la aplicación
+│       ├── technical_analysis_view.py  # Análisis técnico y métricas
+│       ├── prediction_view.py          # Vista principal de predicción
+│       ├── monitoring_view.py          # Dashboard de monitoreo
+│       └── about_view.py               # Información del proyecto
 │
 └── models/                 # Artefactos serializados (Persistencia)
+    ├── lstm_model.keras   # Modelo LSTM-DNN entrenado
+    ├── mlp_model.keras    # Modelo MLP entrenado
     ├── stacking_model.pkl  # Modelo final de ensamble (RF + XGBoost)
+    ├── scaler.pkl         # StandardScaler serializado
     ├── features.pkl        # Metadatos de columnas
     ├── xgb_simple_shap.pkl # Modelo proxy para explicabilidad
     └── category_prices.pkl # Precios promedio por categoría

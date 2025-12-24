@@ -37,7 +37,7 @@ from app.config import (
 from app.state_manager import SessionStateManager
 from app.services import PricingService, PredictionService
 from app.components import SHAPRenderer
-from app.views import PredictionView, MonitoringView, AboutView
+from app.views import PredictionView, MonitoringView, AboutView, TechnicalAnalysisView
 from app.ui_components import Sidebar, Header
 
 
@@ -136,17 +136,22 @@ def main():
     }
 
     # Renderizar tabs principales
-    tab_pred, tab_monitor, tab_info = st.tabs(["Predicción", "Monitoreo", "Acerca de"])
+    tabs = ["Predicción", "Monitoreo", "Análisis Técnico", "Acerca de"]
+    tab_objects = st.tabs(tabs)
 
-    with tab_pred:
+    with tab_objects[0]:
         prediction_view = PredictionView(prediction_service, shap_renderer)
         prediction_view.render(predict_btn, input_data)
 
-    with tab_monitor:
+    with tab_objects[1]:
         monitoring_view = MonitoringView(prediction_service)
         monitoring_view.render()
 
-    with tab_info:
+    with tab_objects[2]:
+        technical_view = TechnicalAnalysisView()
+        technical_view.render()
+
+    with tab_objects[3]:
         about_view = AboutView(prediction_service)
         about_view.render()
 

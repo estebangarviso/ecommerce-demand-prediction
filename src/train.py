@@ -298,6 +298,45 @@ def train_models(use_balancing: bool = False, rolling_windows: Optional[List[int
 
     print(f"✅ Entrenamiento completado. Modelos guardados en: {MODELS_DIR}")
 
+    # ===========================================
+    # Export predictions for technical analysis
+    # ===========================================
+    print(f"\n📦 Exporting predictions for analysis...")
+
+    # Create exports directory
+    EXPORTS_DIR = os.path.join(os.path.dirname(MODELS_DIR), "exports")
+    os.makedirs(EXPORTS_DIR, exist_ok=True)
+
+    # Export predictions with residuals for key models
+    models_to_export = {"randomforest": rf_model, "xgboost": xgb_model, "stacking": stacking_model}
+
+    for model_name, model in models_to_export.items():
+        # Generate predictions on validation set
+        y_pred_log = model.predict(X_val)
+
+        # Convert to original scale
+        y_true_original = np.expm1(y_val)
+        y_pred_original = np.expm1(y_pred_log)
+
+        # Create predictions DataFrame with metadata
+        predictions_df = pd.DataFrame(
+            {
+                "y_true": y_true_original.values,
+                "y_pred": y_pred_original,
+                "residual": y_true_original.values - y_pred_original,
+                "shop_cluster": val["shop_cluster"].values,
+                "item_category_id": val["item_category_id"].values,
+                "date_block_num": val["date_block_num"].values,
+            }
+        )
+
+        # Save to CSV
+        output_path = os.path.join(EXPORTS_DIR, f"predictions_{model_name}_val.csv")
+        predictions_df.to_csv(output_path, index=False)
+        print(f"  ✅ Exported: predictions_{model_name}_val.csv")
+
+    print(f"📂 Predictions exported to: {EXPORTS_DIR}")
+
     # Mostrar ranking de modelos
     sorted_metrics = sorted(all_metrics, key=lambda x: x["r2"], reverse=True)
     print(f"\n🏆 Ranking de modelos (por R²):")

@@ -134,68 +134,56 @@ class PredictionService:
                 )
                 raise ValueError("Datos contienen valores no numéricos")
 
-            # Para StackingRegressor, necesitamos usar KernelExplainer o LinearExplainer
-            # porque el estimador final solo recibe las predicciones de los modelos base
-            if hasattr(self.shap_model, "final_estimator_"):
-                # Es un StackingRegressor - usar explainers de los modelos base
-                # st.info("🔍 Calculando SHAP desde modelo base (optimizado)", icon=":material/analytics:")
+            # Estrategia: Buscar un modelo compatible con TreeExplainer
+            model_to_explain = None
 
-                # Usar el primer estimador base (típicamente el más importante)
-                # Esto es mucho más rápido que KernelExplainer en el stacking completo
+            if hasattr(self.shap_model, "final_estimator_"):
+                # Es un StackingRegressor - buscar el primer modelo basado en árboles
                 base_estimators = self.shap_model.estimators_
 
-                if len(base_estimators) > 0:
-                    # Usar el primer modelo base (usualmente Random Forest o similar)
-                    base_model = base_estimators[0]
+                for estimator in base_estimators:
+                    # Verificar si el estimador es compatible con TreeExplainer
+                    # Modelos compatibles tienen atributo 'tree_' (DecisionTree, RandomForest)
+                    # o 'estimators_' (ensembles basados en árboles como RandomForest, GradientBoosting)
+                    if hasattr(estimator, "tree_") or hasattr(estimator, "estimators_"):
+                        model_to_explain = estimator
+                        break
 
-                    try:
-                        # Intentar TreeExplainer con el modelo base
-                        explainer = shap.TreeExplainer(base_model)
-                        shap_explanation = explainer(feat_df)
-                    except Exception:
-                        # Si falla, usar aproximación simple con LinearExplainer
-                        # Crear un explainer lineal simple basado en feature importance
-                        st.warning(
-                            "⚠️ Usando aproximación simplificada de SHAP", icon=":material/info:"
+                if model_to_explain is None:
+                    # Si no hay modelos de árbol, cargar el XGBoost simple para SHAP
+                    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+                    xgb_shap_path = os.path.join(base_dir, "models", "xgb_simple_shap.pkl")
+
+                    if os.path.exists(xgb_shap_path):
+                        model_to_explain = joblib.load(xgb_shap_path)
+                        st.info(
+                            "🔍 Usando modelo XGBoost simplificado para SHAP",
+                            icon=":material/analytics:",
                         )
-
-                        # Calcular importancias de features si están disponibles
-                        if hasattr(base_model, "feature_importances_"):
-                            importances = base_model.feature_importances_
-                            prediction = base_model.predict(feat_df)[0]
-                            base_value = np.mean(base_model.predict(feat_df))
-
-                            # Aproximar SHAP values usando feature importance
-                            shap_values = np.array(
-                                [importances * (feat_df.values[0] - feat_df.values[0].mean())]
-                            )
-
-                            shap_explanation = shap.Explanation(
-                                values=shap_values,
-                                base_values=base_value,
-                                data=feat_df.values,
-                                feature_names=feat_df.columns.tolist(),
-                            )
-                        else:
-                            raise ValueError("No se puede calcular SHAP para este modelo")
-                else:
-                    raise ValueError("No hay estimadores base disponibles")
+                    else:
+                        raise ValueError(
+                            f"No se encontró un modelo compatible con TreeExplainer. "
+                            f"Verifica que exista {xgb_shap_path}"
+                        )
             else:
-                # Modelo directo (no stacking) - usar TreeExplainer
-                try:
-                    explainer = shap.TreeExplainer(self.shap_model)
-                    shap_explanation = explainer(feat_df)
-                except Exception:
-                    # Fallback a KernelExplainer
-                    background = shap.sample(feat_df, min(10, len(feat_df)))
-                    explainer = shap.KernelExplainer(self.shap_model.predict, background)
-                    shap_values = explainer.shap_values(feat_df)
-                    shap_explanation = shap.Explanation(
-                        values=shap_values,
-                        base_values=explainer.expected_value,
-                        data=feat_df.values,
-                        feature_names=feat_df.columns.tolist(),
-                    )
+                # Modelo directo - verificar compatibilidad con TreeExplainer
+                if hasattr(self.shap_model, "tree_") or hasattr(self.shap_model, "estimators_"):
+                    model_to_explain = self.shap_model
+                else:
+                    # Cargar XGBoost simple como fallback
+                    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+                    xgb_shap_path = os.path.join(base_dir, "models", "xgb_simple_shap.pkl")
+
+                    if os.path.exists(xgb_shap_path):
+                        model_to_explain = joblib.load(xgb_shap_path)
+                        st.info("🔍 Usando modelo XGBoost para SHAP", icon=":material/analytics:")
+                    else:
+                        # Último recurso: usar el modelo actual y dejar que falle explícitamente
+                        model_to_explain = self.shap_model
+
+            # Ahora SÍ usar TreeExplainer con el modelo apropiado
+            explainer = shap.TreeExplainer(model_to_explain)
+            shap_explanation = explainer(feat_df)
         except Exception as e:
             st.error(f"❌ Error en SHAP: {type(e).__name__}: {str(e)}")
             raise
